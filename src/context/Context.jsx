@@ -7,23 +7,45 @@ const ai = new GoogleGenAI({
     apiKey: import.meta.env.VITE_GEMINI_API_KEY
 });
 
-const ContextProvider = (props) => {
+const ContextProvider = ({ children }) => {
     const [input, setInput] = useState("");
     const [recentPrompt, setRecentPrompt] = useState("");
+    const [recentPrompts, setRecentPrompts] = useState([]);
     const [response, setResponse] = useState("");
+    const [displayedText, setDisplayedText] = useState("");
     const [showResult, setShowResult] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [resultData, setResultData] = useState("");
+
+    const typeResponse = (text) => {
+        let index = 0;
+        setDisplayedText("");
+
+        const interval = setInterval(() => {
+            index++;
+            setDisplayedText(text.slice(0, index));
+
+            if (index >= text.length) {
+                clearInterval(interval);
+            }
+        }, 10);
+    };
 
     const onSent = async (prompt) => {
-        const userPrompt = prompt || input;
+        const userPrompt = (prompt ?? input).trim();
 
-        if (!userPrompt.trim() || loading) return;
+        if (!userPrompt || loading) return;
 
         setRecentPrompt(userPrompt);
+        setRecentPrompts((prev) => [
+            userPrompt,
+            ...prev.filter((item) => item !== userPrompt)
+        ]);
+
         setInput("");
-        setLoading(true);
         setShowResult(true);
+        setLoading(true);
+        setDisplayedText("");
+        setResponse("");
 
         try {
             const result = await ai.models.generateContent({
@@ -31,46 +53,57 @@ const ContextProvider = (props) => {
                 contents: `Answer the following question in clean, readable plain text.
 
                 Formatting rules:
-                - Do not use Markdown.
-                - Do not use **, ##, *, backticks, or other Markdown symbols.
-                - Avoid unnecessary headings and decorative symbols.
+                - Do not use unnecessary Markdown.
+                - Avoid decorative symbols.
+                - Keep paragraphs short and readable.
                 - Use simple numbered points when needed.
-                - Keep paragraphs short and easy to read.
-                - For code examples, provide properly formatted code without Markdown fences.
-                - Make the answer clear and beginner-friendly.
+                - Make the answer beginner-friendly.
 
                 Question: ${userPrompt}`
             });
 
-            const responseText = result.text;
-
-            console.log("Gemini Response:", responseText);
+            const responseText = result.text || "";
 
             setResponse(responseText);
-            setResultData(responseText);
+            typeResponse(responseText);
 
         } catch (error) {
             console.error("Gemini API Error:", error);
-            setResultData("Something went wrong. Please try again.");
+
+            const errorMessage = "Something went wrong. Please try again.";
+
+            setResponse(errorMessage);
+            setDisplayedText(errorMessage);
+
         } finally {
             setLoading(false);
         }
+    };
+
+    const newChat = () => {
+        setShowResult(false);
+        setRecentPrompt("");
+        setResponse("");
+        setDisplayedText("");
+        setInput("");
     };
 
     const contextValue = {
         input,
         setInput,
         recentPrompt,
+        recentPrompts,
         response,
+        displayedText,
         onSent,
+        newChat,
         loading,
-        resultData,
         showResult
     };
 
     return (
         <Context.Provider value={contextValue}>
-            {props.children}
+            {children}
         </Context.Provider>
     );
 };
